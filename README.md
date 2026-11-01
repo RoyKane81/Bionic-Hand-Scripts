@@ -33,17 +33,19 @@ data/              Recorded EMG sessions and labeling reference images
 Each sketch lives in its own folder so it opens directly in the Arduino IDE.
 
 ### `proportional_control/proportional_control.ino` — **current controller**
-Proportional grip force control. Instead of an on/off threshold, the smoothed
-EMG envelope is scaled to a 0–1 activation between your calibrated rest level
+Proportional grip force control. Instead of an on/off threshold, the EMG
+envelope (averaged over the last `AVG_WINDOW` readings) is scaled to a 0–1 activation between your calibrated rest level
 and max contraction, and that sets the closing PWM. Once the fingers stall on an
 object, motor torque is roughly proportional to PWM, so squeezing harder grips
 harder. Relaxing drives the hand open for `OPEN_TIME_MS`, then releases the motor.
 
-- **Startup:** relax for 3 s, then squeeze as hard as possible for 3 s.
+- **Calibration:** starts with default values (`DEFAULT_REST_MEAN`,
+  `DEFAULT_REST_STD`, `DEFAULT_MVC_LEVEL`). Press the button on pin 8 to
+  recalibrate: relax for 3 s, then squeeze as hard as possible for 3 s.
 - **Serial:** 115200 baud, prints `envelope,activation%,pwm` for Serial Plotter
   (pwm is negative while opening).
 - **Tune:** `MIN_PWM` (lowest PWM that moves the fingers), `MVC_FRACTION`
-  (lower = less effort for full force), `SMOOTHING`, `REST_STD_MULT`
+  (lower = less effort for full force), `AVG_WINDOW`, `REST_STD_MULT`
   (raise if the hand twitches at rest), `OPEN_PWM` / `OPEN_TIME_MS`.
 - **Caution:** holding a grip stalls the motor, which draws max current and heats
   the motor and TB6612 (≈1.2 A continuous). Lower `MAX_PWM` if your motor's

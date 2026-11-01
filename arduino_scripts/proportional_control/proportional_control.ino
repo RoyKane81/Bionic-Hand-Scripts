@@ -5,7 +5,8 @@
 // torque is roughly proportional to PWM, so squeezing harder = gripping harder.
 // Relaxing opens the hand for OPEN_TIME_MS, then the motor is released.
 //
-// On power-up: relax for 3 s, then squeeze as hard as you can for 3 s.
+// Starts with default calibration values. Press the button to recalibrate:
+// relax for 3 s, then squeeze as hard as you can for 3 s.
 // Open Serial Plotter at 115200 to see env / activation / pwm.
 
 // ---- Pins (same TB6612 wiring as button_actuated) ----
@@ -13,6 +14,9 @@ const int AIN1 = 13;
 const int AIN2 = 4;
 const int PWMA = 11;
 const int MYO_PIN = A0;   // MyoWare 2.0 ENV pin
+const int BUTTON = 8;     // calibration button
+const int BUTTON_ACTIVE = HIGH;  // reading when pressed (HIGH = external pull-down, as in button_actuated)
+const unsigned long DEBOUNCE_MS = 50;
 
 // ---- Tuning ----
 const int SAMPLE_MS = 5;              // 200 Hz control loop
@@ -24,10 +28,13 @@ const int MAX_PWM = 255;
 const int OPEN_PWM = 150;             // speed used to open when relaxed
 const unsigned long OPEN_TIME_MS = 1000;  // how long to drive open after relaxing
 
-// ---- Calibration results ----
-float restMean = 0;
-float restStd = 0;
-float mvcLevel = 0;
+// ---- Calibration (defaults used until the button is pressed) ----
+const float DEFAULT_REST_MEAN = 45;   // ADC counts, typical resting envelope
+const float DEFAULT_REST_STD = 5;
+const float DEFAULT_MVC_LEVEL = 400;  // ADC counts at max squeeze
+float restMean = DEFAULT_REST_MEAN;
+float restStd = DEFAULT_REST_STD;
+float mvcLevel = DEFAULT_MVC_LEVEL;
 
 float envSmoothed = 0;
 unsigned long lastSample = 0;
@@ -39,11 +46,11 @@ void setup() {
   pinMode(AIN1, OUTPUT);
   pinMode(AIN2, OUTPUT);
   pinMode(PWMA, OUTPUT);
+  pinMode(BUTTON, INPUT);
   stopMotor();
 
   Serial.begin(115200);
 
-  calibrate();
   envSmoothed = restMean;
   lastSample = millis();
 }
@@ -52,6 +59,15 @@ void loop() {
   unsigned long now = millis();
   if (now - lastSample < SAMPLE_MS) return;
   lastSample = now;
+
+  if (buttonPressed()) {
+    stopMotor();
+    calibrate();
+    envSmoothed = restMean;
+    openedSinceGrip = true;
+    lastSample = millis();
+    return;
+  }
 
   // Smooth the envelope
   envSmoothed += SMOOTHING * (analogRead(MYO_PIN) - envSmoothed);
@@ -88,6 +104,26 @@ float computeActivation(float env) {
   float high = restMean + MVC_FRACTION * (mvcLevel - restMean);
   if (high <= low) high = low + 1;
   return constrain((env - low) / (high - low), 0.0, 1.0);
+}
+
+
+/********************************************************************************/
+// True once per press: on a debounced transition to BUTTON_ACTIVE
+bool buttonPressed() {
+  static int stableState = !BUTTON_ACTIVE;
+  static int lastReading = !BUTTON_ACTIVE;
+  static unsigned long lastChange = 0;
+
+  int reading = digitalRead(BUTTON);
+  if (reading != lastReading) {
+    lastReading = reading;
+    lastChange = millis();
+  }
+  if (millis() - lastChange > DEBOUNCE_MS && reading != stableState) {
+    stableState = reading;
+    return stableState == BUTTON_ACTIVE;
+  }
+  return false;
 }
 
 
